@@ -60,6 +60,11 @@ struct tConfig {
   int temperature_unit = 1; // 1 = CELSIUS, 2 = KELVIN, 3= FAHRENHEIT
   int dev_mode = 0; // developer mode, do not use, does strange things and changes often ;-)
   int disable_web_server = 0; // 1 = disable internal web server
+  int data_source = 0; // 0 = Nightscout (default), 1 = Home Assistant (Carelink integration)
+  int ui_style = 0; // 0 = classic page 1, 1 = Minimed Monitor style page 1
+  char ha_host[64]; // Home Assistant host name or IP address
+  int ha_port = 8123; // Home Assistant port (plain HTTP)
+  char ha_token[256]; // Home Assistant long-lived access token
   bool is_task_bootstrapping = 0; //  1 = task is to bootstrap
   char wlanssid[10][64];
   char wlanpass[10][64];
@@ -98,6 +103,17 @@ struct NSinfo {
   float basal_tempbasal = 0;
   float basal_combobolusbasal = 0;
   float basal_totalbasal = 0;
+  // values only delivered by the Home Assistant Carelink integration, -1 = unknown
+  int pump_battery = -1;      // pump battery in %
+  float reservoir_units = -1; // units of insulin left in the reservoir
+  int sensor_hours = -1;      // remaining sensor life in hours
+  int calib_hours = -1;       // hours to next calibration (-1 = not applicable)
+  int conduit_ok = -1;        // 1 = phone/transmitter in range of the pump
+  int sensor_conn_ok = -1;    // 1 = sensor connected
+  int tir = -1;               // time in range %
+  int tir_above = -1;         // time above range %
+  int tir_below = -1;         // time below range %
+  int avg_mgdl = -1;          // average glucose in mg/dL
 } ;
 
 void readConfigFromFlash(tConfig *cfg);

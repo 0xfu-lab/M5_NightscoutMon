@@ -3,6 +3,19 @@
 ## Revisions
 
 
+### Home Assistant data source and Minimed style page (unreleased)
+
+* New data source `data_source = homeassistant`: reads glucose, trend, delta, active insulin, pump battery, reservoir, sensor age
+  and time in range from the Home Assistant [Carelink integration](https://github.com/yo-han/Home-Assistant-Carelink) with
+  a single request to the Home Assistant template API. Configure `ha_host`, `ha_port` and `ha_token` in M5NS.INI.
+  The Home Assistant data has no history, so the mini graph fills up as new readings arrive.
+  The Nightscout source is unchanged and stays the default.
+* New first page `ui_style = 1` in the style of the [M5 Minimed Monitor](https://github.com/ondrej1024/m5-minimed-monitor):
+  pump/sensor icons, clock, big glucose value in a shield, trend arrow, active insulin and time in range.
+  Drawn with primitives only, so it needs no extra memory on the M5Stack Core (Basic/Gray). The classic page is still the default.
+* M5NS.INI lines can now be up to 255 characters long (needed for the Home Assistant token).
+* The Home Assistant settings are read from M5NS.INI and kept in the flash configuration, but are not yet editable in the web configuration page.
+
 ### 2 October 2022
 
 * Updates for Railway (longer token, accept "trend" in addition to "direction", response count limited to 10).  

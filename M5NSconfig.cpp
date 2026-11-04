@@ -103,6 +103,11 @@ void readConfigFromFlash(tConfig *cfg) {
     cfg->vibration_strength = prefs.getInt("vibration_stren", 512);
     cfg->micro_dot_pHAT = prefs.getInt("micro_dot_pHAT", 0);
     cfg->disable_web_server = prefs.getInt("dis_web_server", 0);
+    cfg->data_source = prefs.getInt("data_source", 0);
+    cfg->ui_style = prefs.getInt("ui_style", 0);
+    prefs.getString("ha_host", cfg->ha_host, 64);
+    cfg->ha_port = prefs.getInt("ha_port", 8123);
+    prefs.getString("ha_token", cfg->ha_token, 256);
     cfg->dev_mode = prefs.getInt("developer_mode", 0);
     char tmps[64];
     int wlans_defined_count = 0;
@@ -185,6 +190,11 @@ void saveConfigToFlash(tConfig *cfg) {
     prefs.putInt("vibration_stren", cfg->vibration_strength);
     prefs.putInt("micro_dot_pHAT", cfg->micro_dot_pHAT);
     prefs.putInt("dis_web_server", cfg->disable_web_server);
+    prefs.putInt("data_source", cfg->data_source);
+    prefs.putInt("ui_style", cfg->ui_style);
+    prefs.putString("ha_host", cfg->ha_host);
+    prefs.putInt("ha_port", cfg->ha_port);
+    prefs.putString("ha_token", cfg->ha_token);
     prefs.putInt("developer_mode", cfg->dev_mode);
     char tmps[64];
     for(int i=0; i<10; i++) {
@@ -205,7 +215,7 @@ void saveConfigToFlash(tConfig *cfg) {
 }
 
 void readConfiguration(const char *iniFilename, tConfig *cfg) {
-  const size_t bufferLen = 80;
+  const size_t bufferLen = 256;
   char buffer[bufferLen];
     
   File dstFil;
@@ -792,6 +802,41 @@ void readConfiguration(const char *iniFilename, tConfig *cfg) {
   else {
     Serial.println("NO disable_web_server defined = 0");
     cfg->disable_web_server = 0;
+  }
+
+  // data source: nightscout (default) or homeassistant
+  cfg->data_source = 0;
+  if (ini.getValue("config", "data_source", buffer, bufferLen)) {
+    Serial.print("data_source = ");
+    Serial.println(buffer);
+    if (strcasecmp(buffer, "homeassistant") == 0 || strcasecmp(buffer, "ha") == 0 || strcmp(buffer, "1") == 0)
+      cfg->data_source = 1;
+  }
+  else {
+    Serial.println("NO data_source defined = nightscout");
+  }
+
+  cfg->ui_style = 0;
+  if (ini.getValue("config", "ui_style", buffer, bufferLen)) {
+    cfg->ui_style = atoi(buffer);
+    Serial.print("ui_style = ");
+    Serial.println(cfg->ui_style);
+  }
+
+  cfg->ha_port = 8123;
+  if (ini.getValue("config", "ha_host", buffer, bufferLen)) {
+    strlcpy(cfg->ha_host, buffer, sizeof(cfg->ha_host));
+    Serial.print("ha_host = ");
+    Serial.println(cfg->ha_host);
+  }
+  if (ini.getValue("config", "ha_port", buffer, bufferLen)) {
+    cfg->ha_port = atoi(buffer);
+    Serial.print("ha_port = ");
+    Serial.println(cfg->ha_port);
+  }
+  if (ini.getValue("config", "ha_token", buffer, bufferLen)) {
+    strlcpy(cfg->ha_token, buffer, sizeof(cfg->ha_token));
+    Serial.println("ha_token defined"); // never print the token itself
   }
 
   int wlans_defined_count = 0;
