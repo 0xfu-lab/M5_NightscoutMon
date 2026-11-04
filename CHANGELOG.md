@@ -14,7 +14,9 @@
   pump/sensor icons, clock, big glucose value in a shield, trend arrow, active insulin and time in range.
   Drawn with primitives only, so it needs no extra memory on the M5Stack Core (Basic/Gray). The classic page is still the default.
 * M5NS.INI lines can now be up to 255 characters long (needed for the Home Assistant token).
-* The Home Assistant settings are read from M5NS.INI and kept in the flash configuration, but are not yet editable in the web configuration page.
+* The web configuration page shows and changes the data source, the Home Assistant host, port and token, and the first page style.
+  The token is never displayed (leave the field empty to keep it). Switching the data source reads the new source at once.
+  "Save to M5NS.INI" now also writes data_source, ui_style and the Home Assistant settings.
 
 ### 2 October 2022
 

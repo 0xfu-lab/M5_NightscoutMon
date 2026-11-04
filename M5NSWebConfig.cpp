@@ -199,6 +199,10 @@ void handleRoot() {
 
   message += "<p><b>Current configuration</b><br />\r\n";
   message += "Nightscout URL: "; message += "<a href=\""; message += NSurl; message += "\"><b>"; message += NSurl; message += "</b></a> <a href=\"edititem?param=NSurl\">[edit]</a><br />\r\n";
+  message += "Data source: <b>"; message += cfg.data_source?"Home Assistant (Carelink)":"Nightscout"; message += "</b> <a href=\"switch?param=data_source\">[change]</a><br />\r\n";
+  message += "Home Assistant: <b>"; message += cfg.ha_host[0]?cfg.ha_host:"(not set)"; message += ":"; message += cfg.ha_port;
+  message += cfg.ha_token[0]?", token set":", no token"; message += "</b> <a href=\"edititem?param=HA\">[edit]</a><br />\r\n";
+  message += "First page style: <b>"; message += cfg.ui_style?"Minimed Monitor":"Classic"; message += "</b> <a href=\"switch?param=ui_style\">[change]</a><br />\r\n";
   message += "User name: <b>"; message += cfg.userName; message += "</b> <a href=\"edititem?param=userName\">[edit]</a><br />\r\n";
   message += "Device name: <b>"; message += cfg.deviceName; message += "</b> <a href=\"edititem?param=deviceName\">[edit]</a><br />\r\n";
   message += "Time offset: <b>"; message += cfg.timeZone; message += " seconds</b> <a href=\"edititem?param=timeZoneDST\">[edit]</a><br />\r\n";
@@ -573,6 +577,16 @@ void handleSwitchConfig() {
       if(String(w3srv.arg(i)).equals("disable_web_server")) {
         cfg.disable_web_server = !cfg.disable_web_server;
       }
+      if(String(w3srv.arg(i)).equals("data_source")) {
+        cfg.data_source = !cfg.data_source;
+        // data of the previous source is not valid any more, read the new source at once
+        ns.sensTime = 0;
+        memset(ns.last10sgv, 0, sizeof(ns.last10sgv));
+        rcnt = 4;
+      }
+      if(String(w3srv.arg(i)).equals("ui_style")) {
+        cfg.ui_style = !cfg.ui_style;
+      }
     }
   }
   message += "</body>\r\n";
@@ -622,6 +636,18 @@ void handleEditConfigItem() {
       message += "Security token: \r\n";
       message += "<input type=\"text\" name=\"token\" value=\"" + String(cfg.token) + "\" size=\"64\" maxlength=\"64\"> \r\n";
       message += " (empty, if not used)<br>\r\n";
+    }
+    if(String(w3srv.arg(0)).equals("HA")) {
+      message += "Home Assistant host name or IP address: \r\n";
+      message += "<input type=\"text\" name=\"ha_host\" value=\"" + String(cfg.ha_host) + "\" size=\"32\" maxlength=\"63\"> \r\n";
+      message += " (for example <i>homeassistant.local</i>, plain HTTP)<br>\r\n";
+      message += "Port: \r\n";
+      message += "<input type=\"text\" name=\"ha_port\" value=\"" + String(cfg.ha_port) + "\" size=\"5\" maxlength=\"5\"> \r\n";
+      message += " (usually 8123)<br>\r\n";
+      message += "Long-lived access token: \r\n";
+      message += "<input type=\"password\" name=\"ha_token\" value=\"\" size=\"48\" maxlength=\"255\" autocomplete=\"off\"> \r\n";
+      message += cfg.ha_token[0]?" (a token is set, leave empty to keep it)<br>\r\n":" (create it in Home Assistant under your profile, Security)<br>\r\n";
+      message += "Use data source Home Assistant on the main page to read the data from it.<br>\r\n";
     }
     if(String(w3srv.arg(0)).equals("deviceName")) {
       message += "M5Stack device name: \r\n";
@@ -774,6 +800,21 @@ void handleGetEditConfigItem() {
     }
     if(String(w3srv.argName(i)).equals("token")) {
       strncpy(cfg.token, String(w3srv.arg(i)).c_str(), 64);
+    }
+    if(String(w3srv.argName(i)).equals("ha_host")) {
+      String h = String(w3srv.arg(i));
+      h.trim();
+      strlcpy(cfg.ha_host, h.c_str(), sizeof(cfg.ha_host));
+    }
+    if(String(w3srv.argName(i)).equals("ha_port")) {
+      int port = String(w3srv.arg(i)).toInt();
+      cfg.ha_port = (port>0 && port<65536) ? port : 8123;
+    }
+    if(String(w3srv.argName(i)).equals("ha_token")) {
+      String t = String(w3srv.arg(i));
+      t.trim();
+      if(t.length()>0) // empty = keep the current token
+        strlcpy(cfg.ha_token, t.c_str(), sizeof(cfg.ha_token));
     }
     if(String(w3srv.argName(i)).equals("deviceName")) {
       strncpy(cfg.deviceName, String(w3srv.arg(i)).c_str(), 32);
@@ -991,6 +1032,15 @@ void handleSaveConfig() {
     dstFil.print("default_page = "); dstFil.print(cfg.default_page); dstFil.print("\r\n");
     dstFil.print("restart_at_time = "); dstFil.print(cfg.restart_at_time); dstFil.print("\r\n");
     dstFil.print("restart_at_logged_errors = "); dstFil.print(cfg.restart_at_logged_errors); dstFil.print("\r\n");
+    dstFil.print("data_source = "); dstFil.print(cfg.data_source?"homeassistant":"nightscout"); dstFil.print("\r\n");
+    dstFil.print("ui_style = "); dstFil.print(cfg.ui_style); dstFil.print("\r\n");
+    if(cfg.ha_host[0]) {
+      dstFil.print("ha_host = "); dstFil.print(cfg.ha_host); dstFil.print("\r\n");
+      dstFil.print("ha_port = "); dstFil.print(cfg.ha_port); dstFil.print("\r\n");
+    }
+    if(cfg.ha_token[0]) {
+      dstFil.print("ha_token = "); dstFil.print(cfg.ha_token); dstFil.print("\r\n");
+    }
     dstFil.print("\r\n");
     dstFil.print("snooze_timeout = "); dstFil.print(cfg.snooze_timeout); dstFil.print("\r\n");
     dstFil.print("alarm_repeat = "); dstFil.print(cfg.alarm_repeat); dstFil.print("\r\n");

@@ -18,5 +18,6 @@ extern int dispPage;
 extern int maxPage;
 extern void setPageIconPos(int page);
 extern uint8_t lcdBrightness;
+extern int rcnt;
 
 #endif
