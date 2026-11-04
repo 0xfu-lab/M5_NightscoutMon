@@ -106,22 +106,18 @@ void handleRoot() {
       Serial.println("Error getting whatsnew.txt");
     }
     http.end();
-    whatsNew.replace("\r\n","<br />\r\n");
+    // the line breaks are added when the text is put in the page (htmlEscapeLines)
   }
   // Serial.println(webVer.length());
 
-  char NSurl[128];
-  if(strncmp(cfg.url, "http", 4))
-    strcpy(NSurl,"https://");
-  else
-    strcpy(NSurl,"");
-  strcat(NSurl,cfg.url);
-  if ((cfg.token!=NULL) && (strlen(cfg.token)>0)) {
-    if(strchr(NSurl,'?'))
-      strcat(NSurl,"&token=");
-    else
-      strcat(NSurl,"?token=");
-    strcat(NSurl,cfg.token);
+  // NSurl is what the page shows, NSlink is what the link opens (with the token). Strings, because
+  // url (127) + prefix + token (63) does not fit a fixed buffer of 128.
+  String NSurl = strncmp(cfg.url, "http", 4) ? "https://" : "";
+  NSurl += cfg.url;
+  String NSlink = NSurl;
+  if (strlen(cfg.token)>0) {
+    NSlink += strchr(NSurl.c_str(),'?') ? "&token=" : "?token=";
+    NSlink += cfg.token;
   }
 
   String sgvUnits = cfg.show_mgdl?"mg/dL":"mmol/L";
@@ -234,7 +230,7 @@ void handleRoot() {
   message += "</p>\r\n";
 
   message += "<p><b>Current configuration</b><br />\r\n";
-  message += "Nightscout URL: "; message += "<a href=\""; message += htmlEscape(NSurl); message += "\"><b>"; message += htmlEscape(NSurl); message += "</b></a> <a href=\"edititem?param=NSurl\">[edit]</a><br />\r\n";
+  message += "Nightscout URL: "; message += "<a href=\""; message += htmlEscape(NSlink); message += "\"><b>"; message += htmlEscape(NSurl); message += "</b></a> <a href=\"edititem?param=NSurl\">[edit]</a><br />\r\n";
   message += "Data source: <b>"; message += cfg.data_source?"Home Assistant (Carelink)":"Nightscout"; message += "</b> <a href=\"switch?param=data_source\">[change]</a><br />\r\n";
   message += "Home Assistant: <b>"; message += cfg.ha_host[0]?htmlEscape(cfg.ha_host):String("(not set)"); message += ":"; message += cfg.ha_port;
   message += cfg.ha_token[0]?", token set":", no token"; message += "</b> <a href=\"edititem?param=HA\">[edit]</a><br />\r\n";

@@ -26,6 +26,9 @@
   are not shown in the forms any more. An empty field keeps the current value, a "remove" checkbox deletes it, and a new network
   name starts without the password of the old one. The row number of the WiFi fields is checked (a request with `wlanssid99` or
   `wlanssidabc` used to write outside the list or into row 0).
+* The main page shows the Nightscout URL without the token. The link itself still opens the site with the token (it is in the
+  link target only). The URL with the token is built without a fixed 128 byte buffer, which a long URL plus token could overflow.
+  The news text of the update server keeps its line breaks.
 
 ### 2 October 2022
 
