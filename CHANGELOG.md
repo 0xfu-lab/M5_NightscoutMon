@@ -3,6 +3,35 @@
 ## Revisions
 
 
+### Home Assistant data source and Minimed style page (unreleased)
+
+* New data source `data_source = homeassistant`: reads glucose, trend, delta, active insulin, pump battery, reservoir, sensor age
+  and time in range from the Home Assistant [Carelink integration](https://github.com/yo-han/Home-Assistant-Carelink) with
+  a single request to the Home Assistant template API. Configure `ha_host`, `ha_port` and `ha_token` in M5NS.INI.
+  The Home Assistant data has no history, so the mini graph fills up as new readings arrive.
+  The Nightscout source is unchanged and stays the default.
+* New first page `ui_style = 1` in the style of the [M5 Minimed Monitor](https://github.com/ondrej1024/m5-minimed-monitor):
+  pump/sensor icons, clock, big glucose value in a shield, trend arrow, active insulin and time in range.
+  Drawn with primitives only, so it needs no extra memory on the M5Stack Core (Basic/Gray). The classic page is still the default.
+* M5NS.INI lines can now be up to 255 characters long (needed for the Home Assistant token).
+* The web configuration page shows and changes the data source, the Home Assistant host, port and token, and the first page style.
+  The token is never displayed (leave the field empty to keep it). Switching the data source reads the new source at once.
+  "Save to M5NS.INI" now also writes data_source, ui_style and the Home Assistant settings.
+* Home Assistant values are range checked (glucose 20-600 mg/dL, no NaN/infinity, sane time stamps) and the Minimed style
+  page uses bounded string formatting.
+* All text shown in the web configuration pages is HTML escaped: user name, device name, URL, token, times, WiFi names and
+  passwords, the SSIDs found by the scan, the sensor direction and the text of the update server (which is fetched over plain HTTP).
+  Before, a value with a quote or a tag could break the page or inject script.
+* The web configuration no longer puts secrets in the pages: the Nightscout token, the Home Assistant token and the WiFi passwords
+  are not shown in the forms any more. An empty field keeps the current value, a "remove" checkbox deletes it, and a new network
+  name starts without the password of the old one. The row number of the WiFi fields is checked (a request with `wlanssid99` or
+  `wlanssidabc` used to write outside the list or into row 0).
+* The main page shows the Nightscout URL without the token. The link itself still opens the site with the token (it is in the
+  link target only). The URL with the token is built without a fixed 128 byte buffer, which a long URL plus token could overflow.
+  The news text of the update server keeps its line breaks.
+* Home Assistant entities are found with and without the `carelink_<pump>_` prefix (`sensor.last_glucose_level_mg_dl` as well as
+  `sensor.carelink_<pump>_last_glucose_level_mg_dl`). Before, only the prefixed form was found.
+
 ### 2 October 2022
 
 * Updates for Railway (longer token, accept "trend" in addition to "direction", response count limited to 10).  

@@ -52,6 +52,12 @@ name = YourName                     ; display name
 device_name = M5NS                  ; device name for mDNS, that can be used to  access the device from local
                                     ; intranet, use .local domain, eg. m5ns.local
 disable_web_server = 0              ; To disable internal Web server enter 'disable_web_server = 1'
+data_source = nightscout            ; 'nightscout' (default) or 'homeassistant' to read the data from the
+                                    ; Home Assistant Carelink integration (Medtronic pump) instead
+ha_host = homeassistant.local       ; Home Assistant host name or IP address (plain HTTP)
+ha_port = 8123                      ; Home Assistant port
+ha_token = long-lived access token  ; Home Assistant token (profile -> Security), one line, max. 255 characters
+ui_style = 0                        ; 0 = classic first page, 1 = Minimed Monitor style first page
 time_zone = 3600                    ; the time zone where you live in seconds (3600 is GMT+1, Prague)
 dst = 3600                          ; your daylight saving time offset (3600s is +1 hour)
 show_mgdl = 0                       ; use 0 to display values in mmol/L or 1 for mg/dl

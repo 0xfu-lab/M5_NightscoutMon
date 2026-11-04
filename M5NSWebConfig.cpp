@@ -30,6 +30,42 @@
   #define updateNewsURL "http://m5ns.goit.cz/update/basic/whatsnew.txt"
 #endif
 
+// text for use in HTML, also inside an attribute value
+static String htmlEscape(const char *in);
+static String htmlEscape(const String &in) { return htmlEscape(in.c_str()); }
+
+static String htmlEscape(const char *in) {
+  String out;
+  for (; *in; in++) {
+    switch (*in) {
+      case '&': out += "&amp;"; break;
+      case '<': out += "&lt;"; break;
+      case '>': out += "&gt;"; break;
+      case '"': out += "&quot;"; break;
+      case '\'': out += "&#39;"; break;
+      default: out += *in;
+    }
+  }
+  return out;
+}
+
+// row number of a "wlanssid<N>", "wlanpass<N>" or "wlannopass<N>" field: one digit 0-9, otherwise -1.
+// The name comes from the request, toInt() would turn "abc" into row 0.
+static int wlanRow(const String &fieldName, int prefixLength) {
+  if(fieldName.length() != (unsigned)prefixLength + 1)
+    return -1;
+  char c = fieldName.charAt(prefixLength);
+  return (c >= '0' && c <= '9') ? c - '0' : -1;
+}
+
+// escaped text with line breaks, for the text of the update server
+static String htmlEscapeLines(const String &in) {
+  String out = htmlEscape(in);
+  out.replace("\r", "");
+  out.replace("\n", "<br />\r\n");
+  return out;
+}
+
 void handleRoot() {
   String webVer;
   String whatsNew;
@@ -70,22 +106,18 @@ void handleRoot() {
       Serial.println("Error getting whatsnew.txt");
     }
     http.end();
-    whatsNew.replace("\r\n","<br />\r\n");
+    // the line breaks are added when the text is put in the page (htmlEscapeLines)
   }
   // Serial.println(webVer.length());
 
-  char NSurl[128];
-  if(strncmp(cfg.url, "http", 4))
-    strcpy(NSurl,"https://");
-  else
-    strcpy(NSurl,"");
-  strcat(NSurl,cfg.url);
-  if ((cfg.token!=NULL) && (strlen(cfg.token)>0)) {
-    if(strchr(NSurl,'?'))
-      strcat(NSurl,"&token=");
-    else
-      strcat(NSurl,"?token=");
-    strcat(NSurl,cfg.token);
+  // NSurl is what the page shows, NSlink is what the link opens (with the token). Strings, because
+  // url (127) + prefix + token (63) does not fit a fixed buffer of 128.
+  String NSurl = strncmp(cfg.url, "http", 4) ? "https://" : "";
+  NSurl += cfg.url;
+  String NSlink = NSurl;
+  if (strlen(cfg.token)>0) {
+    NSlink += strchr(NSurl.c_str(),'?') ? "&token=" : "?token=";
+    NSlink += cfg.token;
   }
 
   String sgvUnits = cfg.show_mgdl?"mg/dL":"mmol/L";
@@ -102,14 +134,14 @@ void handleRoot() {
   message += "text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}\r\n";
   message += ".button2 {background-color: #555555;}\r\n";
   message += "</style>\r\n";  
-  message += "<title>M5 Nightscout - "; message += cfg.userName;  message += "</title>\r\n";
+  message += "<title>M5 Nightscout - "; message += htmlEscape(cfg.userName);  message += "</title>\r\n";
   message += "</head>\r\n";
   message += "<body>\r\n";
-  message += "<h1>M5Stack Nightscout monitor for "; message += cfg.userName; message += "!</h1>\r\n";
+  message += "<h1>M5Stack Nightscout monitor for "; message += htmlEscape(cfg.userName); message += "!</h1>\r\n";
 
   message += "<p><b>M5Stack Nightscout monitor status</b><br />\r\n";
   if ( WiFi.status() == WL_CONNECTED) {
-    message += "WiFi connected to SSID: <b>"; message += WiFi.SSID(); message += "</b><br />\r\n";
+    message += "WiFi connected to SSID: <b>"; message += htmlEscape(WiFi.SSID()); message += "</b><br />\r\n";
     if(mDNSactive) {
       message += "mDNS name: <b>";
       sprintf(tmpStr, "%s.local", cfg.deviceName);
@@ -178,7 +210,7 @@ void handleRoot() {
     sprintf(tmpStr, "%4.1f mmol/L", ns.sensSgv);
   }
   message += "Last sensor value: <b>"; message += tmpStr; message += "</b><br />\r\n";
-  message += "Last sensor direction: <b>"; message += ns.sensDir; message += "</b><br />\r\n";
+  message += "Last sensor direction: <b>"; message += htmlEscape(ns.sensDir); message += "</b><br />\r\n";
 /* can possibly display all this, but why?
   struct tm sensTm;
   char sensDir[32];
@@ -198,15 +230,19 @@ void handleRoot() {
   message += "</p>\r\n";
 
   message += "<p><b>Current configuration</b><br />\r\n";
-  message += "Nightscout URL: "; message += "<a href=\""; message += NSurl; message += "\"><b>"; message += NSurl; message += "</b></a> <a href=\"edititem?param=NSurl\">[edit]</a><br />\r\n";
-  message += "User name: <b>"; message += cfg.userName; message += "</b> <a href=\"edititem?param=userName\">[edit]</a><br />\r\n";
-  message += "Device name: <b>"; message += cfg.deviceName; message += "</b> <a href=\"edititem?param=deviceName\">[edit]</a><br />\r\n";
+  message += "Nightscout URL: "; message += "<a href=\""; message += htmlEscape(NSlink); message += "\"><b>"; message += htmlEscape(NSurl); message += "</b></a> <a href=\"edititem?param=NSurl\">[edit]</a><br />\r\n";
+  message += "Data source: <b>"; message += cfg.data_source?"Home Assistant (Carelink)":"Nightscout"; message += "</b> <a href=\"switch?param=data_source\">[change]</a><br />\r\n";
+  message += "Home Assistant: <b>"; message += cfg.ha_host[0]?htmlEscape(cfg.ha_host):String("(not set)"); message += ":"; message += cfg.ha_port;
+  message += cfg.ha_token[0]?", token set":", no token"; message += "</b> <a href=\"edititem?param=HA\">[edit]</a><br />\r\n";
+  message += "First page style: <b>"; message += cfg.ui_style?"Minimed Monitor":"Classic"; message += "</b> <a href=\"switch?param=ui_style\">[change]</a><br />\r\n";
+  message += "User name: <b>"; message += htmlEscape(cfg.userName); message += "</b> <a href=\"edititem?param=userName\">[edit]</a><br />\r\n";
+  message += "Device name: <b>"; message += htmlEscape(cfg.deviceName); message += "</b> <a href=\"edititem?param=deviceName\">[edit]</a><br />\r\n";
   message += "Time offset: <b>"; message += cfg.timeZone; message += " seconds</b> <a href=\"edititem?param=timeZoneDST\">[edit]</a><br />\r\n";
   message += "Daylight saving time offset: <b>"; message += cfg.dst; message += " seconds</b> <a href=\"edititem?param=timeZoneDST\">[edit]</a><br />\r\n";
   message += "Display units: <b>"; message += cfg.show_mgdl?"mg/dL":"mmol/L"; message += "</b> <a href=\"switch?param=show_mgdl\">[change]</a><br />\r\n";
   message += "Filter only SGV values: <b>"; message += cfg.sgv_only?"YES":"NO"; message += "</b> <a href=\"switch?param=sgv_only\">[change]</a><br />\r\n";
   message += "Default page: <b>"; message += cfg.default_page; message += "</b> <a href=\"switch?param=default_page\">[change]</a><br />\r\n";
-  message += "Restart at time: <b>"; message += strcmp(cfg.restart_at_time,"NORES")==0?"do NOT restart":cfg.restart_at_time; message += "</b> <a href=\"edititem?param=restartAt\">[edit]</a><br />\r\n";
+  message += "Restart at time: <b>"; message += strcmp(cfg.restart_at_time,"NORES")==0?String("do NOT restart"):htmlEscape(cfg.restart_at_time); message += "</b> <a href=\"edititem?param=restartAt\">[edit]</a><br />\r\n";
   message += "Restart at logged number of errors: <b>"; message += cfg.restart_at_logged_errors==0?"do NOT restart":String(cfg.restart_at_logged_errors); message += "</b> <a href=\"edititem?param=restartAt\">[edit]</a><br />\r\n";
   message += "Show time: <b>"; message += cfg.show_current_time?"current time":"last valid data"; message += "</b> <a href=\"switch?param=show_current_time\">[change]</a><br />\r\n";
   message += "Show COB+IOB: <b>"; message += cfg.show_COB_IOB?"YES":"NO"; message += "</b> <a href=\"switch?param=show_COB_IOB\">[change]</a><br />\r\n";
@@ -283,7 +319,7 @@ void handleRoot() {
       wlans_defined_count++;
       message += "[wlan"; message += i; message += "] <b>";
       message += "SSID='";
-      message += cfg.wlanssid[i];
+      message += htmlEscape(cfg.wlanssid[i]);
       if(cfg.wlanpass[i][0]!=0) {
         message += "', PASS='";
         for(int j=0; j<strlen(cfg.wlanpass[i]); j++)
@@ -313,7 +349,7 @@ void handleRoot() {
   // firmware info and update
   message += "<p><b>Application firmware</b><br />\r\n";
   message += "Current version: "; message += M5NSversion; message += "<br />\r\n";
-  message += "Latest version: "; message += webVer; 
+  message += "Latest version: "; message += htmlEscape(webVer); 
   if(webVer > M5NSversion) {
     message += " ";
     message += "<a href=\"/update\"><b>click to update</b></a>";
@@ -321,7 +357,7 @@ void handleRoot() {
   message += "<br />\r\n";
   if(whatsNew.length()>0) {
     message += "<b>Last update information:</b><br />\r\n";
-    message += whatsNew;
+    message += htmlEscapeLines(whatsNew);
     message += "\r\n";
   }
   
@@ -357,10 +393,10 @@ void handleUpdate() {
   message += "<style>\r\n";  
   message += "html { font-family: Segoe UI; display: inline-block; margin: 5px auto; text-align: left;}\r\n";
   message += "</style>\r\n";  
-  message += "<title>M5 Nightscout - "; message += cfg.userName;  message += "</title>\r\n";
+  message += "<title>M5 Nightscout - "; message += htmlEscape(cfg.userName);  message += "</title>\r\n";
   message += "</head>\r\n";
   message += "<body>\r\n";
-  message += "<h1>M5Stack Nightscout monitor for "; message += cfg.userName; message += "!</h1>\r\n";
+  message += "<h1>M5Stack Nightscout monitor for "; message += htmlEscape(cfg.userName); message += "!</h1>\r\n";
 
   String webVer;
   HTTPClient http;
@@ -380,7 +416,7 @@ void handleUpdate() {
   
   if(webVer > M5NSversion) {
     message += "<p>Updating firmware to version ";
-    message += webVer;
+    message += htmlEscape(webVer);
     message += ", please wait ... </p>\r\n";
     message += "<p>Device will restart automatically.</p>\r\n";
     message += "</body>\r\n";
@@ -422,7 +458,7 @@ void handleUpdate() {
     }    
   } else {
     message += "<p>Nothing to update. Firmware version ";
-    message += webVer;
+    message += htmlEscape(webVer);
     message += " is current.</p>\r\n";
     message += "</body>\r\n";
     message += "</html>\r\n";
@@ -456,10 +492,10 @@ void handleSwitchConfig() {
   message += "<style>\r\n";  
   message += "html { font-family: Segoe UI; display: inline-block; margin: 5px auto; text-align: left;}\r\n";
   message += "</style>\r\n";  
-  message += "<title>M5 Nightscout - "; message += cfg.userName;  message += "</title>\r\n";
+  message += "<title>M5 Nightscout - "; message += htmlEscape(cfg.userName);  message += "</title>\r\n";
   message += "</head>\r\n";
   message += "<body>\r\n";
-  message += "<h1>M5Stack Nightscout monitor for "; message += cfg.userName; message += "!</h1>\r\n";
+  message += "<h1>M5Stack Nightscout monitor for "; message += htmlEscape(cfg.userName); message += "!</h1>\r\n";
   message += "<p>Switching configuration value.</p>\r\n";
   /*
   message += "\nArguments: ";
@@ -573,6 +609,16 @@ void handleSwitchConfig() {
       if(String(w3srv.arg(i)).equals("disable_web_server")) {
         cfg.disable_web_server = !cfg.disable_web_server;
       }
+      if(String(w3srv.arg(i)).equals("data_source")) {
+        cfg.data_source = !cfg.data_source;
+        // data of the previous source is not valid any more, read the new source at once
+        ns.sensTime = 0;
+        memset(ns.last10sgv, 0, sizeof(ns.last10sgv));
+        rcnt = 4;
+      }
+      if(String(w3srv.arg(i)).equals("ui_style")) {
+        cfg.ui_style = !cfg.ui_style;
+      }
     }
   }
   message += "</body>\r\n";
@@ -602,10 +648,10 @@ void handleEditConfigItem() {
   message += "<style>\r\n";  
   message += "html { font-family: Segoe UI; display: inline-block; margin: 5px auto; text-align: left;}\r\n";
   message += "</style>\r\n";  
-  message += "<title>M5 Nightscout - "; message += cfg.userName;  message += "</title>\r\n";
+  message += "<title>M5 Nightscout - "; message += htmlEscape(cfg.userName);  message += "</title>\r\n";
   message += "</head>\r\n";
   message += "<body>\r\n";
-  message += "<h1>M5Stack Nightscout monitor for "; message += cfg.userName; message += "!</h1>\r\n";
+  message += "<h1>M5Stack Nightscout monitor for "; message += htmlEscape(cfg.userName); message += "!</h1>\r\n";
   message += "<p>Edit configuration item.</p>\r\n";
   message += "<form action=\"/getedititem\" method=\"post\">\r\n";
   // char itemName[60];
@@ -613,19 +659,37 @@ void handleEditConfigItem() {
   if(String(w3srv.argName(0)).equals("param")) {
     if(String(w3srv.arg(0)).equals("userName")) {
       message += "M5Stack user name: \r\n";
-      message += "<input type=\"text\" name=\"" + String(w3srv.arg(0)) + "\" value=\"" + String(cfg.userName) + "\" size=\"20\" maxlength=\"32\"><br>\r\n";
+      message += "<input type=\"text\" name=\"" + String(w3srv.arg(0)) + "\" value=\"" + htmlEscape(cfg.userName) + "\" size=\"20\" maxlength=\"32\"><br>\r\n";
     }
     if(String(w3srv.arg(0)).equals("NSurl")) {
       message += "Nightscout site URL: \r\n";
-      message += "<input type=\"text\" name=\"url\" value=\"" + String(cfg.url) + "\" size=\"32\" maxlength=\"128\"> \r\n";
+      message += "<input type=\"text\" name=\"url\" value=\"" + htmlEscape(cfg.url) + "\" size=\"32\" maxlength=\"128\"> \r\n";
       message += " (for example <i>sitename.herokuapp.com</i>)<br>\r\n";
       message += "Security token: \r\n";
-      message += "<input type=\"text\" name=\"token\" value=\"" + String(cfg.token) + "\" size=\"64\" maxlength=\"64\"> \r\n";
-      message += " (empty, if not used)<br>\r\n";
+      message += "<input type=\"password\" name=\"token\" value=\"\" size=\"40\" maxlength=\"64\" autocomplete=\"off\"> \r\n";
+      if(cfg.token[0])
+        message += " (a token is set, leave empty to keep it) <label><input type=\"checkbox\" name=\"token_clear\" value=\"1\"> remove the token</label><br>\r\n";
+      else
+        message += " (empty, if not used)<br>\r\n";
+    }
+    if(String(w3srv.arg(0)).equals("HA")) {
+      message += "Home Assistant host name or IP address: \r\n";
+      message += "<input type=\"text\" name=\"ha_host\" value=\"" + htmlEscape(cfg.ha_host) + "\" size=\"32\" maxlength=\"63\"> \r\n";
+      message += " (for example <i>homeassistant.local</i>, plain HTTP)<br>\r\n";
+      message += "Port: \r\n";
+      message += "<input type=\"text\" name=\"ha_port\" value=\"" + String(cfg.ha_port) + "\" size=\"5\" maxlength=\"5\"> \r\n";
+      message += " (usually 8123)<br>\r\n";
+      message += "Long-lived access token: \r\n";
+      message += "<input type=\"password\" name=\"ha_token\" value=\"\" size=\"48\" maxlength=\"255\" autocomplete=\"off\"> \r\n";
+      if(cfg.ha_token[0])
+        message += " (a token is set, leave empty to keep it) <label><input type=\"checkbox\" name=\"ha_token_clear\" value=\"1\"> remove the token</label><br>\r\n";
+      else
+        message += " (create it in Home Assistant under your profile, Security)<br>\r\n";
+      message += "Use data source Home Assistant on the main page to read the data from it.<br>\r\n";
     }
     if(String(w3srv.arg(0)).equals("deviceName")) {
       message += "M5Stack device name: \r\n";
-      message += "<input type=\"text\" name=\"deviceName\" value=\"" + String(cfg.deviceName) + "\" size=\"12\" maxlength=\"32\">.local \r\n";
+      message += "<input type=\"text\" name=\"deviceName\" value=\"" + htmlEscape(cfg.deviceName) + "\" size=\"12\" maxlength=\"32\">.local \r\n";
       message += "(for internet browser access)<br>\r\n";
       message += "<font color=red>Warning: changes work only after save to M5NS.INI and reboot of the M5Stack device.</font><br>\r\n";
     }
@@ -641,7 +705,7 @@ void handleEditConfigItem() {
     }
     if(String(w3srv.arg(0)).equals("restartAt")) {
       message += "Restart at time: \r\n";
-      message += "<input type=\"text\" name=\"restart_at_time\" value=\"" + String(cfg.restart_at_time) + "\" size=\"5\" maxlength=\"5\"> \r\n";
+      message += "<input type=\"text\" name=\"restart_at_time\" value=\"" + htmlEscape(cfg.restart_at_time) + "\" size=\"5\" maxlength=\"5\"> \r\n";
       message += "(device restart time in 24h HH:MM format or NORES for no restart at any time)<br>\r\n";
       message += "Restart at logged number of errors: \r\n";
       message += "<input type=\"text\" name=\"restart_at_logged_errors\" value=\"" + String(cfg.restart_at_logged_errors) + "\" size=\"5\" maxlength=\"5\"> \r\n";
@@ -716,17 +780,23 @@ void handleEditConfigItem() {
       for(int i=1; i<10; i++) {
         message += "[wlan"; message += i; message += "] ";
         if (cfg.wlanssid[i][0] != 0) {
-          message += "SSID: <input type=\"text\" name=\"wlanssid" + String(i) + "\" value=\"" + String(cfg.wlanssid[i]) + "\" size=\"12\" maxlength=\"63\"> , \r\n";
+          message += "SSID: <input type=\"text\" name=\"wlanssid" + String(i) + "\" value=\"" + htmlEscape(cfg.wlanssid[i]) + "\" size=\"12\" maxlength=\"63\"> , \r\n";
         } else {
           message += "<select name=\"wlanssid" + String(i) + "\">\n";
           message += "<option selected=\"default\" value=\"\">none</option>";
           for (int j=0; j<numSsids; j++) {
-            message += "<option value=\"" + String(WiFi.SSID(j)) + "\">" + String(WiFi.SSID(j)) + "</option>";
+            message += "<option value=\"" + htmlEscape(WiFi.SSID(j)) + "\">" + htmlEscape(WiFi.SSID(j)) + "</option>";
           }
           message += "</select>\n";
 
         }
-        message += "PASS: <input type=\"password\" name=\"wlanpass" + String(i) + "\" value=\"" + String(cfg.wlanpass[i]) + "\" size=\"12\" maxlength=\"63\">\r\n";
+        message += "PASS: <input type=\"password\" name=\"wlanpass" + String(i) + "\" value=\"\" size=\"12\" maxlength=\"63\" autocomplete=\"off\">\r\n";
+        if(cfg.wlanssid[i][0] != 0) {
+          if(cfg.wlanpass[i][0] != 0)
+            message += " (set, leave empty to keep it) <label><input type=\"checkbox\" name=\"wlannopass" + String(i) + "\" value=\"1\"> no password</label>\r\n";
+          else
+            message += " (open network)\r\n";
+        }
         if(i==0)
           message += " Do not use this [wlan0] row unless necessary, reserved for autoconfig.\r\n";
         message += "<br />\r\n";
@@ -760,11 +830,16 @@ void handleGetEditConfigItem() {
   message += "<style>\r\n";  
   message += "html { font-family: Segoe UI; display: inline-block; margin: 5px auto; text-align: left;}\r\n";
   message += "</style>\r\n";  
-  message += "<title>M5 Nightscout - "; message += cfg.userName;  message += "</title>\r\n";
+  message += "<title>M5 Nightscout - "; message += htmlEscape(cfg.userName);  message += "</title>\r\n";
   message += "</head>\r\n";
   message += "<body>\r\n";
-  message += "<h1>M5Stack Nightscout monitor for "; message += cfg.userName; message += "!</h1>\r\n";
+  message += "<h1>M5Stack Nightscout monitor for "; message += htmlEscape(cfg.userName); message += "!</h1>\r\n";
   message += "<p>Updating edited items in M5Stack Nightscout monitor configuration (NOT saving to M5NS.INI file).</p>\r\n";
+  // passwords and tokens are never shown, so an empty field means "keep it"; a checkbox removes it
+  bool tokenGiven = false, tokenClear = false, haTokenGiven = false, haTokenClear = false;
+  bool passGiven[10] = {false}, noPass[10] = {false};
+  char oldSsid[10][64];
+  memcpy(oldSsid, cfg.wlanssid, sizeof(oldSsid));
   for (uint8_t i = 0; i < w3srv.args(); i++) {
     if(String(w3srv.argName(i)).equals("userName")) {
       strncpy(cfg.userName, String(w3srv.arg(i)).c_str(), 32);
@@ -773,7 +848,35 @@ void handleGetEditConfigItem() {
       strncpy(cfg.url, String(w3srv.arg(i)).c_str(), 128);
     }
     if(String(w3srv.argName(i)).equals("token")) {
-      strncpy(cfg.token, String(w3srv.arg(i)).c_str(), 64);
+      String t = String(w3srv.arg(i));
+      t.trim();
+      if(t.length()>0) { // empty = keep the current token
+        strlcpy(cfg.token, t.c_str(), sizeof(cfg.token));
+        tokenGiven = true;
+      }
+    }
+    if(String(w3srv.argName(i)).equals("token_clear")) {
+      tokenClear = true;
+    }
+    if(String(w3srv.argName(i)).equals("ha_token_clear")) {
+      haTokenClear = true;
+    }
+    if(String(w3srv.argName(i)).equals("ha_host")) {
+      String h = String(w3srv.arg(i));
+      h.trim();
+      strlcpy(cfg.ha_host, h.c_str(), sizeof(cfg.ha_host));
+    }
+    if(String(w3srv.argName(i)).equals("ha_port")) {
+      int port = String(w3srv.arg(i)).toInt();
+      cfg.ha_port = (port>0 && port<65536) ? port : 8123;
+    }
+    if(String(w3srv.argName(i)).equals("ha_token")) {
+      String t = String(w3srv.arg(i));
+      t.trim();
+      if(t.length()>0) { // empty = keep the current token
+        strlcpy(cfg.ha_token, t.c_str(), sizeof(cfg.ha_token));
+        haTokenGiven = true;
+      }
     }
     if(String(w3srv.argName(i)).equals("deviceName")) {
       strncpy(cfg.deviceName, String(w3srv.arg(i)).c_str(), 32);
@@ -881,25 +984,41 @@ void handleGetEditConfigItem() {
       cfg.vibration_strength = String(w3srv.arg(i)).toInt();
     }
     if(String(w3srv.argName(i)).startsWith("wlanssid")) {
-      tmpStr = String(w3srv.argName(i));
-      tmpStr.remove(0, 8);
-      int nr = tmpStr.toInt();
-      message += "WLAN SSID [" + tmpStr + "] = " + String(w3srv.arg(i)) + " (" + String(w3srv.arg(i)).length() + ")<br />\r\n";
-      strncpy(cfg.wlanssid[nr], String(w3srv.arg(i)).c_str(), 32);
+      int nr = wlanRow(String(w3srv.argName(i)), 8);
+      if(nr>=0) { // the row number comes from the request, do not trust it
+        message += "WLAN SSID [" + String(nr) + "] = " + htmlEscape(w3srv.arg(i)) + " (" + String(w3srv.arg(i)).length() + ")<br />\r\n";
+        strlcpy(cfg.wlanssid[nr], String(w3srv.arg(i)).c_str(), 33);
+      }
     }
     if(String(w3srv.argName(i)).startsWith("wlanpass")) {
-      tmpStr = String(w3srv.argName(i));
-      tmpStr.remove(0, 8);
-      int nr = tmpStr.toInt();
-      
-      // message += "WLAN PASS [" + tmpStr + "] = " + String(w3srv.arg(i)) + " (" + String(w3srv.arg(i)).length() + ")<br />\r\n";
-
-      message += "WLAN PASS [" + tmpStr + "] = ";
-      for(int j=0; j< String(w3srv.arg(i)).length(); j++)
-        message += "*";
-      message += " (" + String(w3srv.arg(i).length()) + ")<br />\r\n";
-      strncpy(cfg.wlanpass[nr], String(w3srv.arg(i)).c_str(), 64);
+      int nr = wlanRow(String(w3srv.argName(i)), 8);
+      if(nr>=0) {
+        if(String(w3srv.arg(i)).length()>0) {
+          message += "WLAN PASS [" + String(nr) + "] = ";
+          for(int j=0; j< String(w3srv.arg(i)).length(); j++)
+            message += "*";
+          message += " (" + String(w3srv.arg(i).length()) + ")<br />\r\n";
+          strlcpy(cfg.wlanpass[nr], String(w3srv.arg(i)).c_str(), sizeof(cfg.wlanpass[nr]));
+          passGiven[nr] = true;
+        } else {
+          message += "WLAN PASS [" + String(nr) + "] unchanged<br />\r\n";
+        }
+      }
     }
+    if(String(w3srv.argName(i)).startsWith("wlannopass")) {
+      int nr = wlanRow(String(w3srv.argName(i)), 10);
+      if(nr>=0)
+        noPass[nr] = true;
+    }
+  }
+  // a typed value wins over "remove"; a new network does not inherit the password of the old one
+  if(tokenClear && !tokenGiven)
+    cfg.token[0] = 0;
+  if(haTokenClear && !haTokenGiven)
+    cfg.ha_token[0] = 0;
+  for(int nr=0; nr<10; nr++) {
+    if(!passGiven[nr] && (noPass[nr] || strcmp(oldSsid[nr], cfg.wlanssid[nr]) != 0))
+      cfg.wlanpass[nr][0] = 0;
   }
   message += "</body>\r\n";
   message += "</html>\r\n";
@@ -928,10 +1047,10 @@ void handleSaveConfig() {
   message += "<style>\r\n";  
   message += "html { font-family: Segoe UI; display: inline-block; margin: 5px auto; text-align: left;}\r\n";
   message += "</style>\r\n";  
-  message += "<title>M5 Nightscout - "; message += cfg.userName;  message += "</title>\r\n";
+  message += "<title>M5 Nightscout - "; message += htmlEscape(cfg.userName);  message += "</title>\r\n";
   message += "</head>\r\n";
   message += "<body>\r\n";
-  message += "<h1>M5Stack Nightscout monitor for "; message += cfg.userName; message += "!</h1>\r\n";
+  message += "<h1>M5Stack Nightscout monitor for "; message += htmlEscape(cfg.userName); message += "!</h1>\r\n";
   message += "<p>Saving configuration to M5NS.INI file.</p>\r\n";
   message += "<p>Backup copy of current M5NS.INI should be blaced in M5NS.BAK file.</p>\r\n";
   message += "</body>\r\n";
@@ -991,6 +1110,15 @@ void handleSaveConfig() {
     dstFil.print("default_page = "); dstFil.print(cfg.default_page); dstFil.print("\r\n");
     dstFil.print("restart_at_time = "); dstFil.print(cfg.restart_at_time); dstFil.print("\r\n");
     dstFil.print("restart_at_logged_errors = "); dstFil.print(cfg.restart_at_logged_errors); dstFil.print("\r\n");
+    dstFil.print("data_source = "); dstFil.print(cfg.data_source?"homeassistant":"nightscout"); dstFil.print("\r\n");
+    dstFil.print("ui_style = "); dstFil.print(cfg.ui_style); dstFil.print("\r\n");
+    if(cfg.ha_host[0]) {
+      dstFil.print("ha_host = "); dstFil.print(cfg.ha_host); dstFil.print("\r\n");
+      dstFil.print("ha_port = "); dstFil.print(cfg.ha_port); dstFil.print("\r\n");
+    }
+    if(cfg.ha_token[0]) {
+      dstFil.print("ha_token = "); dstFil.print(cfg.ha_token); dstFil.print("\r\n");
+    }
     dstFil.print("\r\n");
     dstFil.print("snooze_timeout = "); dstFil.print(cfg.snooze_timeout); dstFil.print("\r\n");
     dstFil.print("alarm_repeat = "); dstFil.print(cfg.alarm_repeat); dstFil.print("\r\n");

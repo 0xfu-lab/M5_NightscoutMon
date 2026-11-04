@@ -63,6 +63,8 @@ Adafruit_NeoPixel pixels(10, 15, NEO_GRB + NEO_KHZ800);
 #include "IniFile.h"
 #include "M5NSconfig.h"
 #include "M5NSWebConfig.h"
+#include "HAClient.h"
+#include "UIMinimed.h"
 
 #include <Wire.h>     //The DHT12 uses I2C comunication.
 #include "DHT12.h"
@@ -931,6 +933,9 @@ void drawMiniGraph(struct NSinfo *ns){
 }
 
 int readNightscout(char *url, char *token, struct NSinfo *ns) {
+  if(cfg.data_source==1) // Home Assistant (Carelink integration) instead of Nightscout
+    return readHomeAssistant(ns);
+
   HTTPClient http;
   WiFiClientSecure sclient;
   sclient.setCACert(rootCACertificate);
@@ -1720,6 +1725,14 @@ void draw_page() {
 
   switch(dispPage) {
     case 0: {
+      if(cfg.ui_style==1) {
+        // Minimed Monitor style page
+        drawPageMinimed(&ns);
+        drawBatteryStatus(icon_xpos[2], icon_ypos[2]);
+        handleAlarmsInfoLine(&ns);
+        drawLogWarningIcon();
+        break;
+      }
       // if there was an error, then clear whole screen, otherwise only graphic updated part
       // M5.Lcd.fillScreen(BLACK);
       // M5.Lcd.fillRect(230, 110, 90, 100, TFT_BLACK);
@@ -2695,7 +2708,7 @@ void loop() {
           ESP.restart();
         }
       }
-      if((dispPage==0) && cfg.show_current_time) {
+      if((dispPage==0) && cfg.show_current_time && cfg.ui_style==0) {
         // update current time on display
         M5.Lcd.setFreeFont(FSSB12);
         M5.Lcd.setTextSize(1);
