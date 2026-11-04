@@ -18,7 +18,10 @@
   The token is never displayed (leave the field empty to keep it). Switching the data source reads the new source at once.
   "Save to M5NS.INI" now also writes data_source, ui_style and the Home Assistant settings.
 * Home Assistant values are range checked (glucose 20-600 mg/dL, no NaN/infinity, sane time stamps) and the Minimed style
-  page uses bounded string formatting. The Home Assistant host is HTML escaped in the web configuration pages.
+  page uses bounded string formatting.
+* All text shown in the web configuration pages is HTML escaped: user name, device name, URL, token, times, WiFi names and
+  passwords, the SSIDs found by the scan, the sensor direction and the text of the update server (which is fetched over plain HTTP).
+  Before, a value with a quote or a tag could break the page or inject script.
 
 ### 2 October 2022
 
