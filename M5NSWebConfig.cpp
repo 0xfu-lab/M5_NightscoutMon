@@ -49,6 +49,15 @@ static String htmlEscape(const char *in) {
   return out;
 }
 
+// row number of a "wlanssid<N>", "wlanpass<N>" or "wlannopass<N>" field: one digit 0-9, otherwise -1.
+// The name comes from the request, toInt() would turn "abc" into row 0.
+static int wlanRow(const String &fieldName, int prefixLength) {
+  if(fieldName.length() != (unsigned)prefixLength + 1)
+    return -1;
+  char c = fieldName.charAt(prefixLength);
+  return (c >= '0' && c <= '9') ? c - '0' : -1;
+}
+
 // escaped text with line breaks, for the text of the update server
 static String htmlEscapeLines(const String &in) {
   String out = htmlEscape(in);
@@ -661,8 +670,11 @@ void handleEditConfigItem() {
       message += "<input type=\"text\" name=\"url\" value=\"" + htmlEscape(cfg.url) + "\" size=\"32\" maxlength=\"128\"> \r\n";
       message += " (for example <i>sitename.herokuapp.com</i>)<br>\r\n";
       message += "Security token: \r\n";
-      message += "<input type=\"text\" name=\"token\" value=\"" + htmlEscape(cfg.token) + "\" size=\"64\" maxlength=\"64\"> \r\n";
-      message += " (empty, if not used)<br>\r\n";
+      message += "<input type=\"password\" name=\"token\" value=\"\" size=\"40\" maxlength=\"64\" autocomplete=\"off\"> \r\n";
+      if(cfg.token[0])
+        message += " (a token is set, leave empty to keep it) <label><input type=\"checkbox\" name=\"token_clear\" value=\"1\"> remove the token</label><br>\r\n";
+      else
+        message += " (empty, if not used)<br>\r\n";
     }
     if(String(w3srv.arg(0)).equals("HA")) {
       message += "Home Assistant host name or IP address: \r\n";
@@ -673,7 +685,10 @@ void handleEditConfigItem() {
       message += " (usually 8123)<br>\r\n";
       message += "Long-lived access token: \r\n";
       message += "<input type=\"password\" name=\"ha_token\" value=\"\" size=\"48\" maxlength=\"255\" autocomplete=\"off\"> \r\n";
-      message += cfg.ha_token[0]?" (a token is set, leave empty to keep it)<br>\r\n":" (create it in Home Assistant under your profile, Security)<br>\r\n";
+      if(cfg.ha_token[0])
+        message += " (a token is set, leave empty to keep it) <label><input type=\"checkbox\" name=\"ha_token_clear\" value=\"1\"> remove the token</label><br>\r\n";
+      else
+        message += " (create it in Home Assistant under your profile, Security)<br>\r\n";
       message += "Use data source Home Assistant on the main page to read the data from it.<br>\r\n";
     }
     if(String(w3srv.arg(0)).equals("deviceName")) {
@@ -779,7 +794,13 @@ void handleEditConfigItem() {
           message += "</select>\n";
 
         }
-        message += "PASS: <input type=\"password\" name=\"wlanpass" + String(i) + "\" value=\"" + htmlEscape(cfg.wlanpass[i]) + "\" size=\"12\" maxlength=\"63\">\r\n";
+        message += "PASS: <input type=\"password\" name=\"wlanpass" + String(i) + "\" value=\"\" size=\"12\" maxlength=\"63\" autocomplete=\"off\">\r\n";
+        if(cfg.wlanssid[i][0] != 0) {
+          if(cfg.wlanpass[i][0] != 0)
+            message += " (set, leave empty to keep it) <label><input type=\"checkbox\" name=\"wlannopass" + String(i) + "\" value=\"1\"> no password</label>\r\n";
+          else
+            message += " (open network)\r\n";
+        }
         if(i==0)
           message += " Do not use this [wlan0] row unless necessary, reserved for autoconfig.\r\n";
         message += "<br />\r\n";
@@ -818,6 +839,11 @@ void handleGetEditConfigItem() {
   message += "<body>\r\n";
   message += "<h1>M5Stack Nightscout monitor for "; message += htmlEscape(cfg.userName); message += "!</h1>\r\n";
   message += "<p>Updating edited items in M5Stack Nightscout monitor configuration (NOT saving to M5NS.INI file).</p>\r\n";
+  // passwords and tokens are never shown, so an empty field means "keep it"; a checkbox removes it
+  bool tokenGiven = false, tokenClear = false, haTokenGiven = false, haTokenClear = false;
+  bool passGiven[10] = {false}, noPass[10] = {false};
+  char oldSsid[10][64];
+  memcpy(oldSsid, cfg.wlanssid, sizeof(oldSsid));
   for (uint8_t i = 0; i < w3srv.args(); i++) {
     if(String(w3srv.argName(i)).equals("userName")) {
       strncpy(cfg.userName, String(w3srv.arg(i)).c_str(), 32);
@@ -826,7 +852,18 @@ void handleGetEditConfigItem() {
       strncpy(cfg.url, String(w3srv.arg(i)).c_str(), 128);
     }
     if(String(w3srv.argName(i)).equals("token")) {
-      strncpy(cfg.token, String(w3srv.arg(i)).c_str(), 64);
+      String t = String(w3srv.arg(i));
+      t.trim();
+      if(t.length()>0) { // empty = keep the current token
+        strlcpy(cfg.token, t.c_str(), sizeof(cfg.token));
+        tokenGiven = true;
+      }
+    }
+    if(String(w3srv.argName(i)).equals("token_clear")) {
+      tokenClear = true;
+    }
+    if(String(w3srv.argName(i)).equals("ha_token_clear")) {
+      haTokenClear = true;
     }
     if(String(w3srv.argName(i)).equals("ha_host")) {
       String h = String(w3srv.arg(i));
@@ -840,8 +877,10 @@ void handleGetEditConfigItem() {
     if(String(w3srv.argName(i)).equals("ha_token")) {
       String t = String(w3srv.arg(i));
       t.trim();
-      if(t.length()>0) // empty = keep the current token
+      if(t.length()>0) { // empty = keep the current token
         strlcpy(cfg.ha_token, t.c_str(), sizeof(cfg.ha_token));
+        haTokenGiven = true;
+      }
     }
     if(String(w3srv.argName(i)).equals("deviceName")) {
       strncpy(cfg.deviceName, String(w3srv.arg(i)).c_str(), 32);
@@ -949,25 +988,41 @@ void handleGetEditConfigItem() {
       cfg.vibration_strength = String(w3srv.arg(i)).toInt();
     }
     if(String(w3srv.argName(i)).startsWith("wlanssid")) {
-      tmpStr = String(w3srv.argName(i));
-      tmpStr.remove(0, 8);
-      int nr = tmpStr.toInt();
-      message += "WLAN SSID [" + tmpStr + "] = " + String(w3srv.arg(i)) + " (" + String(w3srv.arg(i)).length() + ")<br />\r\n";
-      strncpy(cfg.wlanssid[nr], String(w3srv.arg(i)).c_str(), 32);
+      int nr = wlanRow(String(w3srv.argName(i)), 8);
+      if(nr>=0) { // the row number comes from the request, do not trust it
+        message += "WLAN SSID [" + String(nr) + "] = " + htmlEscape(w3srv.arg(i)) + " (" + String(w3srv.arg(i)).length() + ")<br />\r\n";
+        strlcpy(cfg.wlanssid[nr], String(w3srv.arg(i)).c_str(), 33);
+      }
     }
     if(String(w3srv.argName(i)).startsWith("wlanpass")) {
-      tmpStr = String(w3srv.argName(i));
-      tmpStr.remove(0, 8);
-      int nr = tmpStr.toInt();
-      
-      // message += "WLAN PASS [" + tmpStr + "] = " + String(w3srv.arg(i)) + " (" + String(w3srv.arg(i)).length() + ")<br />\r\n";
-
-      message += "WLAN PASS [" + tmpStr + "] = ";
-      for(int j=0; j< String(w3srv.arg(i)).length(); j++)
-        message += "*";
-      message += " (" + String(w3srv.arg(i).length()) + ")<br />\r\n";
-      strncpy(cfg.wlanpass[nr], String(w3srv.arg(i)).c_str(), 64);
+      int nr = wlanRow(String(w3srv.argName(i)), 8);
+      if(nr>=0) {
+        if(String(w3srv.arg(i)).length()>0) {
+          message += "WLAN PASS [" + String(nr) + "] = ";
+          for(int j=0; j< String(w3srv.arg(i)).length(); j++)
+            message += "*";
+          message += " (" + String(w3srv.arg(i).length()) + ")<br />\r\n";
+          strlcpy(cfg.wlanpass[nr], String(w3srv.arg(i)).c_str(), sizeof(cfg.wlanpass[nr]));
+          passGiven[nr] = true;
+        } else {
+          message += "WLAN PASS [" + String(nr) + "] unchanged<br />\r\n";
+        }
+      }
     }
+    if(String(w3srv.argName(i)).startsWith("wlannopass")) {
+      int nr = wlanRow(String(w3srv.argName(i)), 10);
+      if(nr>=0)
+        noPass[nr] = true;
+    }
+  }
+  // a typed value wins over "remove"; a new network does not inherit the password of the old one
+  if(tokenClear && !tokenGiven)
+    cfg.token[0] = 0;
+  if(haTokenClear && !haTokenGiven)
+    cfg.ha_token[0] = 0;
+  for(int nr=0; nr<10; nr++) {
+    if(!passGiven[nr] && (noPass[nr] || strcmp(oldSsid[nr], cfg.wlanssid[nr]) != 0))
+      cfg.wlanpass[nr][0] = 0;
   }
   message += "</body>\r\n";
   message += "</html>\r\n";

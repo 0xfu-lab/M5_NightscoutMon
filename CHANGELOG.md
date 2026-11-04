@@ -22,6 +22,10 @@
 * All text shown in the web configuration pages is HTML escaped: user name, device name, URL, token, times, WiFi names and
   passwords, the SSIDs found by the scan, the sensor direction and the text of the update server (which is fetched over plain HTTP).
   Before, a value with a quote or a tag could break the page or inject script.
+* The web configuration no longer puts secrets in the pages: the Nightscout token, the Home Assistant token and the WiFi passwords
+  are not shown in the forms any more. An empty field keeps the current value, a "remove" checkbox deletes it, and a new network
+  name starts without the password of the old one. The row number of the WiFi fields is checked (a request with `wlanssid99` or
+  `wlanssidabc` used to write outside the list or into row 0).
 
 ### 2 October 2022
 
