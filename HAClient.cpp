@@ -3,8 +3,8 @@
 
   One POST to the Home Assistant template API returns the states of all
   entities of the Carelink integration as JSON. The entities are found by the
-  end of their entity_id (slug of the sensor name), so the pump name in the
-  entity_id does not matter. The glucose history for the mini graph is
+  end of their entity_id (slug of the sensor name), with or without a prefix
+  like carelink_<pump>_, so the pump name in the entity_id does not matter. The glucose history for the mini graph is
   collected on the device, the integration only provides the latest value.
 */
 
@@ -36,11 +36,18 @@ static bool endsWith(const char *s, const char *suffix) {
   return ls >= lx && strcmp(s + ls - lx, suffix) == 0;
 }
 
-// state of the entity whose entity_id ends with suffix (null if not found)
+// State of the entity whose object id (the part after "sensor.") is the name or ends with it.
+// suffix starts with an underscore, for example "_last_glucose_level_mg_dl". The entity is called
+// sensor.last_glucose_level_mg_dl or sensor.carelink_<pump>_last_glucose_level_mg_dl, depending on
+// how Home Assistant named it. Null if not found.
 static JsonVariant haFind(JsonArray states, const char *suffix) {
   for (JsonVariant pair : states) {
     const char *ent = pair[0];
-    if (ent != NULL && endsWith(ent, suffix))
+    if (ent == NULL)
+      continue;
+    const char *dot = strchr(ent, '.');
+    const char *objectId = dot ? dot + 1 : ent;
+    if (strcmp(objectId, suffix + 1) == 0 || endsWith(objectId, suffix))
       return pair[1];
   }
   return JsonVariant();

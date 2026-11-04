@@ -29,6 +29,8 @@
 * The main page shows the Nightscout URL without the token. The link itself still opens the site with the token (it is in the
   link target only). The URL with the token is built without a fixed 128 byte buffer, which a long URL plus token could overflow.
   The news text of the update server keeps its line breaks.
+* Home Assistant entities are found with and without the `carelink_<pump>_` prefix (`sensor.last_glucose_level_mg_dl` as well as
+  `sensor.carelink_<pump>_last_glucose_level_mg_dl`). Before, only the prefixed form was found.
 
 ### 2 October 2022
 
