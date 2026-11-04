@@ -30,6 +30,22 @@
   #define updateNewsURL "http://m5ns.goit.cz/update/basic/whatsnew.txt"
 #endif
 
+// text for use in HTML, also inside an attribute value
+static String htmlEscape(const char *in) {
+  String out;
+  for (; *in; in++) {
+    switch (*in) {
+      case '&': out += "&amp;"; break;
+      case '<': out += "&lt;"; break;
+      case '>': out += "&gt;"; break;
+      case '"': out += "&quot;"; break;
+      case '\'': out += "&#39;"; break;
+      default: out += *in;
+    }
+  }
+  return out;
+}
+
 void handleRoot() {
   String webVer;
   String whatsNew;
@@ -200,7 +216,7 @@ void handleRoot() {
   message += "<p><b>Current configuration</b><br />\r\n";
   message += "Nightscout URL: "; message += "<a href=\""; message += NSurl; message += "\"><b>"; message += NSurl; message += "</b></a> <a href=\"edititem?param=NSurl\">[edit]</a><br />\r\n";
   message += "Data source: <b>"; message += cfg.data_source?"Home Assistant (Carelink)":"Nightscout"; message += "</b> <a href=\"switch?param=data_source\">[change]</a><br />\r\n";
-  message += "Home Assistant: <b>"; message += cfg.ha_host[0]?cfg.ha_host:"(not set)"; message += ":"; message += cfg.ha_port;
+  message += "Home Assistant: <b>"; message += cfg.ha_host[0]?htmlEscape(cfg.ha_host):String("(not set)"); message += ":"; message += cfg.ha_port;
   message += cfg.ha_token[0]?", token set":", no token"; message += "</b> <a href=\"edititem?param=HA\">[edit]</a><br />\r\n";
   message += "First page style: <b>"; message += cfg.ui_style?"Minimed Monitor":"Classic"; message += "</b> <a href=\"switch?param=ui_style\">[change]</a><br />\r\n";
   message += "User name: <b>"; message += cfg.userName; message += "</b> <a href=\"edititem?param=userName\">[edit]</a><br />\r\n";
@@ -639,7 +655,7 @@ void handleEditConfigItem() {
     }
     if(String(w3srv.arg(0)).equals("HA")) {
       message += "Home Assistant host name or IP address: \r\n";
-      message += "<input type=\"text\" name=\"ha_host\" value=\"" + String(cfg.ha_host) + "\" size=\"32\" maxlength=\"63\"> \r\n";
+      message += "<input type=\"text\" name=\"ha_host\" value=\"" + htmlEscape(cfg.ha_host) + "\" size=\"32\" maxlength=\"63\"> \r\n";
       message += " (for example <i>homeassistant.local</i>, plain HTTP)<br>\r\n";
       message += "Port: \r\n";
       message += "<input type=\"text\" name=\"ha_port\" value=\"" + String(cfg.ha_port) + "\" size=\"5\" maxlength=\"5\"> \r\n";

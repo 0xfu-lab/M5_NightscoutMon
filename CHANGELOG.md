@@ -17,6 +17,8 @@
 * The web configuration page shows and changes the data source, the Home Assistant host, port and token, and the first page style.
   The token is never displayed (leave the field empty to keep it). Switching the data source reads the new source at once.
   "Save to M5NS.INI" now also writes data_source, ui_style and the Home Assistant settings.
+* Home Assistant values are range checked (glucose 20-600 mg/dL, no NaN/infinity, sane time stamps) and the Minimed style
+  page uses bounded string formatting. The Home Assistant host is HTML escaped in the web configuration pages.
 
 ### 2 October 2022
 

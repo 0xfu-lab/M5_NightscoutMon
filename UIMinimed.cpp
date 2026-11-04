@@ -72,7 +72,8 @@ static void drawSensorAge(int x, int y, int hours) {
     strcpy(txt, "?");
   } else {
     col = (hours > 9) ? TFT_GREEN : TFT_RED;
-    sprintf(txt, "%d", hours > 9 ? (hours + 12) / 24 : hours);
+    int days = hours / 24 + ((hours % 24) >= 12 ? 1 : 0);          // rounded, no overflow near INT_MAX
+    snprintf(txt, sizeof(txt), "%d", hours > 9 ? days : hours);
   }
   M5.Lcd.drawRoundRect(x + 1, y + 3, 24, 26, 4, col);
   M5.Lcd.fillRect(x + 6, y + 1, 3, 5, col);
@@ -174,9 +175,9 @@ void drawPageMinimed(struct NSinfo *ns) {
 
   // big glucose value, smaller font if it does not fit into the shield
   if (cfg.show_mgdl)
-    sprintf(str, "%.0f", ns->sensSgvMgDl);
+    snprintf(str, sizeof(str), "%.0f", ns->sensSgvMgDl);
   else
-    sprintf(str, "%.1f", ns->sensSgv);
+    snprintf(str, sizeof(str), "%.1f", ns->sensSgv);
   M5.Lcd.setTextDatum(MC_DATUM);
   M5.Lcd.setFreeFont(FSSB18);
   M5.Lcd.setTextSize(2);
@@ -202,7 +203,7 @@ void drawPageMinimed(struct NSinfo *ns) {
   // bottom right: active insulin
   bool haveIob = (strncmp(ns->iob_display, "N/A", 3) != 0) && (cfg.data_source == 1 || cfg.show_COB_IOB);
   if (haveIob) {
-    sprintf(str, "%s U", ns->iob_display);
+    snprintf(str, sizeof(str), "%s U", ns->iob_display);
     M5.Lcd.setTextDatum(BR_DATUM);
     M5.Lcd.setFreeFont(FSSB18);
     M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -215,7 +216,7 @@ void drawPageMinimed(struct NSinfo *ns) {
   // bottom left: time in range with the Carelink data, carbs on board otherwise
   M5.Lcd.setTextDatum(BL_DATUM);
   if (cfg.data_source == 1 && ns->tir >= 0) {
-    sprintf(str, "%d %%", ns->tir);
+    snprintf(str, sizeof(str), "%d %%", ns->tir);
     M5.Lcd.setFreeFont(FSSB18);
     M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Lcd.drawString(str, 2, 176, GFXFF);
@@ -223,7 +224,7 @@ void drawPageMinimed(struct NSinfo *ns) {
     M5.Lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
     M5.Lcd.drawString("In range", 2, 196, GFXFF);
   } else if (cfg.data_source == 0 && cfg.show_COB_IOB && strncmp(ns->cob_display, "N/A", 3) != 0) {
-    sprintf(str, "%s g", ns->cob_display);
+    snprintf(str, sizeof(str), "%s g", ns->cob_display);
     M5.Lcd.setFreeFont(FSSB18);
     M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Lcd.drawString(str, 2, 176, GFXFF);
@@ -235,7 +236,13 @@ void drawPageMinimed(struct NSinfo *ns) {
   // data age below the shield
   int difMin = -1;
   if (timeOK && ns->sensTime > 0)
-    difMin = (int)((difftime(mktime(&timeinfo), ns->sensTime) + 30) / 60);
+  {
+    double mins = (difftime(mktime(&timeinfo), ns->sensTime) + 30) / 60;
+    if (mins < -1)
+      difMin = -1;                    // data from the future: the clock is wrong, show "---"
+    else
+      difMin = (int)(mins > 99999 ? 99999 : mins);
+  }
   M5.Lcd.setTextDatum(MC_DATUM);
   M5.Lcd.setFreeFont(FSS12);
   if (difMin < 0) {
@@ -248,7 +255,7 @@ void drawPageMinimed(struct NSinfo *ns) {
     strcpy(str, "Now");
     M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
   } else {
-    sprintf(str, "%d min ago", difMin);
+    snprintf(str, sizeof(str), "%d min ago", difMin);
     M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
   }
   M5.Lcd.drawString(str, 160, 207, GFXFF);

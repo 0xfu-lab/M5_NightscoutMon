@@ -54,16 +54,28 @@ static bool haNum(JsonVariant v, double *out) {
       return false;
     char *end = NULL;
     double d = strtod(s, &end);
-    if (end == s)
+    if (end == s || !isfinite(d))      // strtod also accepts "nan" and "inf"
       return false;
     *out = d;
     return true;
   }
   if (v.is<double>()) {
-    *out = v.as<double>();
+    double d = v.as<double>();
+    if (!isfinite(d))
+      return false;
+    *out = d;
     return true;
   }
   return false;
+}
+
+// numeric value of a state inside a plausible range, false if unavailable or outside the range
+static bool haNumIn(JsonVariant v, double lo, double hi, double *out) {
+  double d;
+  if (!haNum(v, &d) || d < lo || d > hi)
+    return false;
+  *out = d;
+  return true;
 }
 
 // binary sensor: 1 = on, 0 = off, -1 = unknown
@@ -80,7 +92,7 @@ static int haOnOff(JsonVariant v) {
 
 static int haInt(JsonArray st, const char *suffix, int unknown, int notApplicable = -9999) {
   double d;
-  if (!haNum(haFind(st, suffix), &d))
+  if (!haNumIn(haFind(st, suffix), -1000000, 1000000, &d))    // keeps the cast to int defined
     return unknown;
   if ((int)d == notApplicable)
     return unknown;
@@ -158,9 +170,13 @@ int readHomeAssistant(struct NSinfo *ns) {
     } else {
       JsonArray st = doc["s"];
       double sg = 0, ts = 0, d = 0;
-      haNum(haFind(st, "_last_glucose_level_mg_dl"), &sg);
-      if (!haNum(haFind(st, "_last_glucose_update"), &ts) || ts <= 0)
-        haNum(haFind(st, "_last_update"), &ts);
+      // Carelink delivers 40-400 mg/dL; anything outside 20-600 is not a glucose value
+      if (!haNumIn(haFind(st, "_last_glucose_level_mg_dl"), 20, 600, &sg))
+        sg = 0;
+      // time after 2001 and before 2096, so it fits a 32 bit time_t
+      if (!haNumIn(haFind(st, "_last_glucose_update"), 1e9, 4e9, &ts) &&
+          !haNumIn(haFind(st, "_last_update"), 1e9, 4e9, &ts))
+        ts = 0;
       if (st.isNull() || sg <= 0 || ts <= 0) {
         // no entities, or glucose/time unavailable (Home Assistant marks old data as unavailable)
         Serial.println("No usable glucose data from Home Assistant");
@@ -189,14 +205,14 @@ int readHomeAssistant(struct NSinfo *ns) {
 
         haTrend(haFind(st, "_last_glucose_trend").as<const char *>(), ns->sensDir, sizeof(ns->sensDir), &ns->arrowAngle);
 
-        if (haNum(haFind(st, "_last_glucose_delta"), &d)) {
+        if (haNumIn(haFind(st, "_last_glucose_delta"), -600, 600, &d)) {
           ns->delta_mgdl = (int)lround(d);
           ns->delta_absolute = ns->delta_mgdl;
           ns->delta_scaled = ns->delta_mgdl / 18.0;
           if (cfg.show_mgdl)
-            sprintf(ns->delta_display, "%+d", ns->delta_mgdl);
+            snprintf(ns->delta_display, sizeof(ns->delta_display), "%+d", ns->delta_mgdl);
           else
-            sprintf(ns->delta_display, "%+.1f", ns->delta_scaled);
+            snprintf(ns->delta_display, sizeof(ns->delta_display), "%+.1f", ns->delta_scaled);
         } else {
           ns->delta_mgdl = 0;
           ns->delta_absolute = 0;
@@ -204,7 +220,7 @@ int readHomeAssistant(struct NSinfo *ns) {
           strcpy(ns->delta_display, "--");
         }
 
-        if (haNum(haFind(st, "_active_insulin"), &d)) {
+        if (haNumIn(haFind(st, "_active_insulin"), 0, 1000, &d)) {
           ns->iob = d;
           snprintf(ns->iob_display, sizeof(ns->iob_display), "%.1f", d);
           snprintf(ns->iob_displayLine, sizeof(ns->iob_displayLine), "IOB: %.1fU", d);
@@ -219,7 +235,7 @@ int readHomeAssistant(struct NSinfo *ns) {
 
         // pump and sensor data for the Minimed style page
         ns->pump_battery = haInt(st, "_pump_battery_level", -1);
-        ns->reservoir_units = haNum(haFind(st, "_reservoir_remaining_units"), &d) ? (float)d : -1;
+        ns->reservoir_units = haNumIn(haFind(st, "_reservoir_remaining_units"), 0, 1000, &d) ? (float)d : -1;
         ns->sensor_hours = haInt(st, "_sensor_duration_hours", -1, 255);
         ns->calib_hours = haInt(st, "_sensor_time_to_next_calibration_hours", -1, 255);
         ns->conduit_ok = haOnOff(haFind(st, "_conduit_pump_in_range"));
